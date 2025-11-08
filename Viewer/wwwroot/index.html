@@ -312,8 +312,8 @@
                 <input type="date" id="date-input">
             </div>
             <div class="control-group">
-                <label for="time-input">Time (UTC - Even Minutes)</label>
-                <select id="time-input">
+                <label for="hour-input">Hour (UTC)</label>
+                <select id="hour-input">
                     <!-- Will be populated by JavaScript -->
                 </select>
             </div>
@@ -383,6 +383,28 @@
                     </div>
                 </div>
             </div>
+
+            <!-- MADIS Gauge Data Controls -->
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.2);">
+                <div class="overlay-control-row">
+                    <label class="overlay-toggle">
+                        <input type="checkbox" id="madis-toggle">
+                        <span>Show MADIS Gauges</span>
+                    </label>
+                </div>
+                <div id="madis-options" style="display: none; margin-top: 4px;">
+                    <div class="overlay-control-row">
+                        <label>Look Behind (hrs):</label>
+                        <input type="number" id="madis-lookback" min="0" max="6" value="0" style="padding: 4px; border-radius: 2px; font-size: 10px; width: 50px;">
+
+                        <label style="margin-left: 10px;">Look Ahead (hrs):</label>
+                        <input type="number" id="madis-lookahead" min="0" max="6" value="0" style="padding: 4px; border-radius: 2px; font-size: 10px; width: 50px;">
+
+                        <button id="madis-load-btn" style="margin-left: 10px; padding: 4px 8px; font-size: 10px; background-color: #27ae60; color: white; border: none; border-radius: 2px; cursor: pointer;">Load Gauges</button>
+                        <span id="madis-status" style="margin-left: 10px; font-size: 10px; color: #ecf0f1;"></span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -392,27 +414,23 @@
     <script src="/overlays/latLonGrid.js"></script>
 
     <script>
-        // Populate time selector with even minutes only (runs immediately)
-        function populateTimeSelector() {
-            const timeSelect = document.getElementById('time-input');
-            if (!timeSelect) return;
+        // Populate hour selector with 00-23 (runs immediately)
+        function populateHourSelector() {
+            const hourSelect = document.getElementById('hour-input');
+            if (!hourSelect) return;
 
-            timeSelect.innerHTML = ''; // Clear existing options
+            hourSelect.innerHTML = ''; // Clear existing options
 
             for (let hour = 0; hour < 24; hour++) {
-                for (let minute = 0; minute < 60; minute += 2) { // Only even minutes
-                    const hourStr = hour.toString().padStart(2, '0');
-                    const minuteStr = minute.toString().padStart(2, '0');
-                    const timeValue = `${hourStr}:${minuteStr}:00`;
-                    const option = document.createElement('option');
-                    option.value = timeValue;
-                    option.textContent = timeValue;
-                    timeSelect.appendChild(option);
-                }
+                const hourStr = hour.toString().padStart(2, '0');
+                const option = document.createElement('option');
+                option.value = hourStr;
+                option.textContent = hourStr + ':00';
+                hourSelect.appendChild(option);
             }
         }
 
-        // Initialize date/time immediately when DOM is ready
+        // Initialize date/hour immediately when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
             const now = new Date();
             const dateInput = document.getElementById('date-input');
@@ -420,17 +438,14 @@
                 dateInput.valueAsDate = now;
             }
 
-            // Populate the time selector
-            populateTimeSelector();
+            // Populate the hour selector
+            populateHourSelector();
 
-            // Round to nearest even minute with :00 seconds and set as selected
-            const hours = now.getUTCHours().toString().padStart(2, '0');
-            const minutes = now.getUTCMinutes();
-            const evenMinutes = Math.floor(minutes / 2) * 2; // Round down to even minute
-            const timeString = `${hours}:${evenMinutes.toString().padStart(2, '0')}:00`;
-            const timeInput = document.getElementById('time-input');
-            if (timeInput) {
-                timeInput.value = timeString;
+            // Set current hour as selected
+            const currentHour = now.getUTCHours().toString().padStart(2, '0');
+            const hourInput = document.getElementById('hour-input');
+            if (hourInput) {
+                hourInput.value = currentHour;
             }
 
             // Update colorbar for initial product
@@ -682,9 +697,9 @@
                 loadBtn.addEventListener('click', async () => {
                     const product = document.getElementById('product-select').value;
                     const dateInput = document.getElementById('date-input').value;
-                    const timeInput = document.getElementById('time-input').value;
+                    const hourInput = document.getElementById('hour-input').value;
                     const date = dateInput.replace(/-/g, '');
-                    const time = timeInput.replace(/:/g, '');
+                    const time = hourInput + '0000'; // Format as HH0000
                     const loading = document.getElementById('loading-indicator');
 
                     // Build the API URL
@@ -851,6 +866,81 @@
                 if (dataLayer) {
                     dataLayer.bringToFront();
                 }
+            });
+
+            // Initialize MADIS gauge plotting (dynamic import)
+            let madisController = null;
+            import('./madis.js').then(module => {
+                madisController = module.initializeMadis(map);
+
+                // MADIS toggle checkbox
+                document.getElementById('madis-toggle').addEventListener('change', (e) => {
+                    const madisOptions = document.getElementById('madis-options');
+                    if (e.target.checked) {
+                        madisOptions.style.display = 'block';
+                        if (madisController) {
+                            madisController.toggleVisibility(true);
+                        }
+                    } else {
+                        madisOptions.style.display = 'none';
+                        if (madisController) {
+                            madisController.toggleVisibility(false);
+                        }
+                    }
+                });
+
+                // MADIS load button
+                document.getElementById('madis-load-btn').addEventListener('click', async () => {
+                    if (!madisController) return;
+
+                    const statusSpan = document.getElementById('madis-status');
+                    const loadBtn = document.getElementById('madis-load-btn');
+
+                    try {
+                        // Show loading message
+                        statusSpan.textContent = 'Loading...';
+                        statusSpan.style.color = '#f39c12';
+                        loadBtn.disabled = true;
+
+                        const dateInput = document.getElementById('date-input').value;
+                        const hourInput = document.getElementById('hour-input').value;
+                        const lookBackHrs = parseInt(document.getElementById('madis-lookback').value) || 0;
+                        const lookAheadHrs = parseInt(document.getElementById('madis-lookahead').value) || 0;
+
+                        // Parse date and time
+                        const date = dateInput.replace(/-/g, '');
+                        const hour = hourInput.padStart(2, '0');
+
+                        // Convert hours to minutes for MADIS API
+                        const lookBackMin = lookBackHrs * 60;
+                        const lookAheadMin = lookAheadHrs * 60;
+
+                        // Load MADIS data
+                        const gaugeCount = await madisController.loadMadisData(date, hour, '00', lookBackMin, lookAheadMin);
+
+                        // Show success message
+                        statusSpan.textContent = `Loaded! (${gaugeCount} gauges)`;
+                        statusSpan.style.color = '#27ae60';
+
+                        // Clear success message after 3 seconds
+                        setTimeout(() => {
+                            statusSpan.textContent = '';
+                        }, 3000);
+                    } catch (error) {
+                        console.error('Error loading MADIS data:', error);
+                        statusSpan.textContent = 'Error loading data';
+                        statusSpan.style.color = '#e74c3c';
+
+                        // Clear error message after 3 seconds
+                        setTimeout(() => {
+                            statusSpan.textContent = '';
+                        }, 3000);
+                    } finally {
+                        loadBtn.disabled = false;
+                    }
+                });
+            }).catch(error => {
+                console.error('Error loading MADIS module:', error);
             });
         } // End of initializeApp function
 

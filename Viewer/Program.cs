@@ -9,6 +9,9 @@ builder.Services.AddOpenApi();
 // Register tile generator as singleton
 builder.Services.AddSingleton<MrmsTileGenerator>();
 
+// Add HttpClient for MADIS proxy
+builder.Services.AddHttpClient();
+
 // Add CORS for development
 builder.Services.AddCors(options =>
 {
