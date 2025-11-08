@@ -162,15 +162,6 @@
             display: none;
         }
 
-        #status {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: rgba(236, 240, 241, 0.9);
-            border-radius: 4px;
-            font-size: 13px;
-            color: #2c3e50;
-        }
-
         /* Overlay Controls Panel */
         #overlay-controls {
             background-color: #2c3e50;
@@ -331,7 +322,6 @@
                 <button id="load-btn">Load Data</button>
             </div>
         </div>
-        <div id="status"></div>
     </header>
 
     <div id="map-container">
@@ -342,8 +332,6 @@
 
     <!-- Overlay Controls -->
     <div id="overlay-controls">
-        <h2>Map Overlays</h2>
-
         <div class="overlay-section">
             <div class="overlay-control-row">
                 <label>Overlay:</label>
@@ -352,6 +340,14 @@
                     <option value="states">State Boundaries</option>
                     <option value="counties">County Boundaries</option>
                     <option value="latlon">Lat/Lon Grid</option>
+                </select>
+
+                <label style="margin-left: 15px;">Basemap:</label>
+                <select id="basemap-select" style="padding: 4px 6px; border-radius: 2px; font-size: 10px; min-width: 120px;">
+                    <option value="dark">Dark (CartoDB)</option>
+                    <option value="osm">OpenStreetMap</option>
+                    <option value="satellite">Satellite (Esri)</option>
+                    <option value="light">Light (CartoDB)</option>
                 </select>
             </div>
 
@@ -640,11 +636,29 @@
                 zoomControl: true
             });
 
-            // Add dark base layer
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                maxZoom: 20
-            }).addTo(map);
+            // Define all available basemaps
+            const basemaps = {
+                dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    maxZoom: 20
+                }),
+                osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    maxZoom: 19
+                }),
+                satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                    maxZoom: 18
+                }),
+                light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    maxZoom: 20
+                })
+            };
+
+            // Add default dark basemap
+            let currentBasemap = basemaps.dark;
+            currentBasemap.addTo(map);
 
             // MRMS data layer (initially null)
             let dataLayer = null;
@@ -671,26 +685,19 @@
                     const timeInput = document.getElementById('time-input').value;
                     const date = dateInput.replace(/-/g, '');
                     const time = timeInput.replace(/:/g, '');
-                    const status = document.getElementById('status');
                     const loading = document.getElementById('loading-indicator');
 
                     // Build the API URL
                     const apiUrl = `/api/tiles/download-s3?product=${product}&date=${date}&time=${time}&cacheKey=default`;
 
-                    // Build the AWS S3 URL that will be attempted
-                    const s3Url = `https://noaa-mrms-pds.s3.amazonaws.com/CONUS/${product}/${date}/MRMS_${product}_${date}-${time}.grib2.gz`;
-
                     loadBtn.disabled = true;
                     loading.style.display = 'block';
-                    status.textContent = 'Downloading data from AWS S3...';
 
                     try {
                         const response = await fetch(apiUrl, { method: 'POST' });
                         const result = await response.json();
 
                         if (response.ok) {
-                            status.innerHTML = `<strong>✓ Success:</strong> ${result.message}<br><small>Expected S3 URL: ${s3Url}</small>`;
-
                             // Remove existing data layer
                             if (dataLayer) {
                                 map.removeLayer(dataLayer);
@@ -704,12 +711,9 @@
 
                             // Update colorbar
                             updateColorbar(product);
-                        } else {
-                            const errorMsg = result.message || result.title || response.statusText;
-                            status.innerHTML = `<strong>✗ Error (${response.status}):</strong> ${errorMsg}<br><small>API URL: ${apiUrl}<br>Expected S3 URL: ${s3Url}</small>`;
                         }
                     } catch (error) {
-                        status.innerHTML = `<strong>✗ Error:</strong> ${error.message}<br><small>API URL: ${apiUrl}<br>Expected S3 URL: ${s3Url}</small>`;
+                        console.error('Error loading data:', error);
                     } finally {
                         loadBtn.disabled = false;
                         loading.style.display = 'none';
@@ -827,6 +831,25 @@
                     overlays[currentOverlay].setOpacity(opacity);
                     document.getElementById('overlay-opacity-value').textContent = opacity;
                     defaultSettings[currentOverlay].opacity = opacity;
+                }
+            });
+
+            // Basemap selector
+            document.getElementById('basemap-select').addEventListener('change', (e) => {
+                const selectedBasemap = e.target.value;
+
+                // Remove current basemap
+                if (currentBasemap) {
+                    map.removeLayer(currentBasemap);
+                }
+
+                // Add new basemap
+                currentBasemap = basemaps[selectedBasemap];
+                currentBasemap.addTo(map);
+
+                // Ensure data layer stays on top if it exists
+                if (dataLayer) {
+                    dataLayer.bringToFront();
                 }
             });
         } // End of initializeApp function
