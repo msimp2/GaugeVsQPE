@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MRMS QPE Viewer</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            align-items: start;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #ecf0f1;
+            letter-spacing: 0.5px;
+        }
+
+        .controls select,
+        .controls input[type="date"],
+        .controls input[type="time"],
+        .controls button {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            color: #333;
+        }
+
+        .controls button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .controls button:hover {
+            background-color: #2980b9;
+        }
+
+        .controls button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        #map-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .leaflet-container {
+            background-color: #1a1a1a;
+        }
+
+        #colorbar {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            min-width: 150px;
+        }
+
+        #colorbar h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            font-weight: bold;
+            color: #2c3e50;
+            text-align: center;
+        }
+
+        .colorbar-scale {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .colorbar-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .colorbar-color {
+            width: 30px;
+            height: 15px;
+            border: 1px solid #ccc;
+        }
+
+        .colorbar-label {
+            font-size: 11px;
+            color: #333;
+            font-family: monospace;
+        }
+
+        /* Force 24-hour time format */
+        input[type="time"]::-webkit-datetime-edit-ampm-field {
+            display: none;
+        }
+
+        #loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            z-index: 2000;
+            display: none;
+        }
+
+        #status {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: rgba(236, 240, 241, 0.9);
+            border-radius: 4px;
+            font-size: 13px;
+            color: #2c3e50;
+        }
+
+        /* Overlay Controls Panel */
+        #overlay-controls {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-top: 2px solid #34495e;
+        }
+
+        #overlay-controls h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #ecf0f1;
+        }
+
+        .overlay-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: rgba(52, 73, 94, 0.5);
+            border-radius: 6px;
+        }
+
+        .overlay-section h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #3498db;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .overlay-control-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .overlay-control-row label {
+            font-size: 13px;
+            min-width: 100px;
+            color: #ecf0f1;
+        }
+
+        .overlay-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .overlay-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .color-picker-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-picker-wrapper input[type="color"] {
+            width: 50px;
+            height: 35px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .color-preview {
+            padding: 6px 12px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .slider-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .slider-wrapper input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #34495e;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .slider-wrapper input[type="range"]::-webkit-slider-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+        }
+
+        .slider-value {
+            min-width: 30px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 13px;
+            color: #ecf0f1;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>MRMS QPE Data Viewer</h1>
+        <div class="controls">
+            <div class="control-group">
+                <label for="product-select">QPE Product</label>
+                <select id="product-select">
+                    <optgroup label="Radar Only QPE">
+                        <option value="RadarOnly_QPE_15M_00.00">Radar Only QPE 15-Minute</option>
+                        <option value="RadarOnly_QPE_01H_00.00">Radar Only QPE 1-Hour</option>
+                        <option value="RadarOnly_QPE_03H_00.00">Radar Only QPE 3-Hour</option>
+                        <option value="RadarOnly_QPE_06H_00.00">Radar Only QPE 6-Hour</option>
+                        <option value="RadarOnly_QPE_12H_00.00">Radar Only QPE 12-Hour</option>
+                        <option value="RadarOnly_QPE_24H_00.00">Radar Only QPE 24-Hour</option>
+                        <option value="RadarOnly_QPE_48H_00.00">Radar Only QPE 48-Hour</option>
+                        <option value="RadarOnly_QPE_72H_00.00">Radar Only QPE 72-Hour</option>
+                        <option value="PrecipRate_00.00">Precipitation Rate</option>
+                    </optgroup>
+                    <optgroup label="Multi-Sensor QPE">
+                        <option value="MultiSensor_QPE_01H_Pass1_00.00">Multi-Sensor QPE 1H Pass 1</option>
+                        <option value="MultiSensor_QPE_01H_Pass2_00.00">Multi-Sensor QPE 1H Pass 2</option>
+                        <option value="MultiSensor_QPE_03H_Pass1_00.00">Multi-Sensor QPE 3H Pass 1</option>
+                        <option value="MultiSensor_QPE_03H_Pass2_00.00">Multi-Sensor QPE 3H Pass 2</option>
+                        <option value="MultiSensor_QPE_06H_Pass1_00.00">Multi-Sensor QPE 6H Pass 1</option>
+                        <option value="MultiSensor_QPE_06H_Pass2_00.00">Multi-Sensor QPE 6H Pass 2</option>
+                        <option value="MultiSensor_QPE_12H_Pass1_00.00">Multi-Sensor QPE 12H Pass 1</option>
+                        <option value="MultiSensor_QPE_12H_Pass2_00.00">Multi-Sensor QPE 12H Pass 2</option>
+                        <option value="MultiSensor_QPE_24H_Pass1_00.00">Multi-Sensor QPE 24H Pass 1</option>
+                        <option value="MultiSensor_QPE_24H_Pass2_00.00">Multi-Sensor QPE 24H Pass 2</option>
+                        <option value="MultiSensor_QPE_48H_Pass1_00.00">Multi-Sensor QPE 48H Pass 1</option>
+                        <option value="MultiSensor_QPE_48H_Pass2_00.00">Multi-Sensor QPE 48H Pass 2</option>
+                        <option value="MultiSensor_QPE_72H_Pass1_00.00">Multi-Sensor QPE 72H Pass 1</option>
+                        <option value="MultiSensor_QPE_72H_Pass2_00.00">Multi-Sensor QPE 72H Pass 2</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="date-input">Date</label>
+                <input type="date" id="date-input">
+            </div>
+            <div class="control-group">
+                <label for="time-input">Time (UTC - Even Minutes)</label>
+                <select id="time-input">
+                    <!-- Will be populated by JavaScript -->
+                </select>
+            </div>
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button id="load-btn">Load Data</button>
+            </div>
+        </div>
+        <div id="status"></div>
+    </header>
+
+    <div id="map-container">
+        <div id="loading-indicator">Loading...</div>
+        <div id="map"></div>
+        <div id="colorbar"></div>
+    </div>
+
+    <!-- Overlay Controls -->
+    <div id="overlay-controls">
+        <h2>Map Overlays & Options</h2>
+
+        <div class="overlay-section">
+            <h3>Overlay Selection</h3>
+
+            <div class="overlay-control-row">
+                <label>Select Overlay:</label>
+                <select id="overlay-type-select" style="padding: 8px 12px; border-radius: 4px; font-size: 14px; min-width: 200px;">
+                    <option value="">-- None --</option>
+                    <option value="states">State Boundaries</option>
+                    <option value="counties">County Boundaries</option>
+                    <option value="latlon">Latitude/Longitude Grid</option>
+                </select>
+            </div>
+
+            <div id="overlay-options" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div class="overlay-control-row">
+                    <label class="overlay-toggle">
+                        <input type="checkbox" id="overlay-toggle">
+                        <span id="overlay-toggle-label">Show Overlay</span>
+                    </label>
+                </div>
+
+                <div class="overlay-control-row">
+                    <label>Line Color:</label>
+                    <div class="color-picker-wrapper">
+                        <input type="color" id="overlay-color-picker" value="#FFFFFF">
+                        <span class="color-preview" id="overlay-color-preview">#FFFFFF</span>
+                    </div>
+                </div>
+
+                <div class="overlay-control-row">
+                    <label>Line Thickness:</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="overlay-weight-slider" min="1" max="10" value="2" step="1">
+                        <span class="slider-value" id="overlay-weight-value">2</span>
+                    </div>
+                </div>
+
+                <div class="overlay-control-row">
+                    <label>Opacity:</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="overlay-opacity-slider" min="0" max="1" value="0.8" step="0.1">
+                        <span class="slider-value" id="overlay-opacity-value">0.8</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Overlay Modules -->
+    <script src="/overlays/stateBoundaries.js"></script>
+    <script src="/overlays/countyBoundaries.js"></script>
+    <script src="/overlays/latLonGrid.js"></script>
+
+    <script>
+        // Populate time selector with even minutes only (runs immediately)
+        function populateTimeSelector() {
+            const timeSelect = document.getElementById('time-input');
+            if (!timeSelect) return;
+
+            timeSelect.innerHTML = ''; // Clear existing options
+
+            for (let hour = 0; hour < 24; hour++) {
+                for (let minute = 0; minute < 60; minute += 2) { // Only even minutes
+                    const hourStr = hour.toString().padStart(2, '0');
+                    const minuteStr = minute.toString().padStart(2, '0');
+                    const timeValue = `${hourStr}:${minuteStr}:00`;
+                    const option = document.createElement('option');
+                    option.value = timeValue;
+                    option.textContent = timeValue;
+                    timeSelect.appendChild(option);
+                }
+            }
+        }
+
+        // Initialize date/time immediately when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const now = new Date();
+            const dateInput = document.getElementById('date-input');
+            if (dateInput) {
+                dateInput.valueAsDate = now;
+            }
+
+            // Populate the time selector
+            populateTimeSelector();
+
+            // Round to nearest even minute with :00 seconds and set as selected
+            const hours = now.getUTCHours().toString().padStart(2, '0');
+            const minutes = now.getUTCMinutes();
+            const evenMinutes = Math.floor(minutes / 2) * 2; // Round down to even minute
+            const timeString = `${hours}:${evenMinutes.toString().padStart(2, '0')}:00`;
+            const timeInput = document.getElementById('time-input');
+            if (timeInput) {
+                timeInput.value = timeString;
+            }
+
+            // Update colorbar for initial product
+            const productSelect = document.getElementById('product-select');
+            if (productSelect) {
+                updateColorbar(productSelect.value);
+            }
+
+            // Update colorbar when product changes
+            productSelect.addEventListener('change', (e) => {
+                updateColorbar(e.target.value);
+            });
+        });
+
+        // QPE colorbars - matching the actual MRMS color scales (global scope)
+        const qpeColorbars = {
+            QPE15Min: {
+                title: 'Precipitation (in) - 15 min',
+                bands: [
+                    'rgb(255, 255, 200)',  // 8.0+
+                    'rgb(150, 100, 200)',  // 7.0-8.0
+                    'rgb(200, 0, 255)',    // 6.5-7.0
+                    'rgb(255, 0, 255)',    // 6.0-6.5
+                    'rgb(180, 0, 0)',      // 5.5-6.0
+                    'rgb(220, 0, 0)',      // 5.0-5.5
+                    'rgb(255, 0, 0)',      // 4.5-5.0
+                    'rgb(255, 50, 0)',     // 4.0-4.5
+                    'rgb(255, 100, 0)',    // 3.0-4.0
+                    'rgb(255, 165, 0)',    // 2.0-3.0
+                    'rgb(255, 200, 0)',    // 1.75-2.0
+                    'rgb(255, 255, 0)',    // 1.25-1.75
+                    'rgb(150, 255, 0)',    // 1.00-1.25
+                    'rgb(0, 255, 0)',      // 0.80-1.00
+                    'rgb(0, 200, 0)',      // 0.60-0.80
+                    'rgb(0, 150, 0)',      // 0.40-0.60
+                    'rgb(0, 0, 255)',      // 0.20-0.40
+                    'rgb(0, 128, 255)',    // 0.10-0.20
+                    'rgb(0, 200, 255)',    // 0.05-0.10
+                    'rgb(0, 255, 255)'     // 0.01-0.05
+                ],
+                labels: ['8.0+', '7.0', '6.5', '6.0', '5.5', '5.0', '4.5', '4.0', '3.0', '2.0', '1.75', '1.25', '1.00', '0.80', '0.60', '0.40', '0.20', '0.10', '0.05', '0.01']
+            },
+            QPE6Hr: {
+                title: 'Precipitation (in) - 6/12 hr',
+                bands: [
+                    'rgb(255, 255, 200)',  // 16.0+
+                    'rgb(150, 100, 200)',  // 14.0-16.0
+                    'rgb(200, 0, 255)',    // 12.0-14.0
+                    'rgb(255, 0, 255)',    // 10.0-12.0
+                    'rgb(180, 0, 0)',      // 9.0-10.0
+                    'rgb(200, 0, 0)',      // 8.0-9.0
+                    'rgb(255, 0, 0)',      // 7.0-8.0
+                    'rgb(255, 50, 0)',     // 6.0-7.0
+                    'rgb(255, 100, 0)',    // 5.0-6.0
+                    'rgb(255, 140, 0)',    // 4.0-5.0
+                    'rgb(255, 165, 0)',    // 3.5-4.0
+                    'rgb(255, 200, 0)',    // 3.0-3.5
+                    'rgb(255, 255, 0)',    // 2.5-3.0
+                    'rgb(200, 255, 0)',    // 2.0-2.5
+                    'rgb(150, 255, 0)',    // 1.50-2.0
+                    'rgb(0, 255, 0)',      // 1.25-1.50
+                    'rgb(0, 200, 0)',      // 1.00-1.25
+                    'rgb(0, 150, 0)',      // 0.80-1.00
+                    'rgb(0, 0, 255)',      // 0.60-0.80
+                    'rgb(0, 128, 255)',    // 0.40-0.60
+                    'rgb(0, 200, 255)',    // 0.20-0.40
+                    'rgb(0, 255, 255)'     // 0.05-0.20
+                ],
+                labels: ['16+', '14', '12', '10', '9', '8', '7', '6', '5', '4', '3.5', '3', '2.5', '2', '1.5', '1.25', '1', '0.8', '0.6', '0.4', '0.2', '0.05']
+            },
+            QPE24Hr: {
+                title: 'Precipitation (in) - 24 hr',
+                bands: [
+                    'rgb(255, 255, 200)',  // 24.0+
+                    'rgb(150, 100, 200)',  // 20.0-24.0
+                    'rgb(200, 0, 255)',    // 18.0-20.0
+                    'rgb(255, 0, 255)',    // 16.0-18.0
+                    'rgb(180, 0, 0)',      // 14.0-16.0
+                    'rgb(220, 0, 0)',      // 12.0-14.0
+                    'rgb(255, 0, 0)',      // 10.0-12.0
+                    'rgb(255, 50, 0)',     // 9.0-10.0
+                    'rgb(255, 100, 0)',    // 8.0-9.0
+                    'rgb(255, 140, 0)',    // 7.0-8.0
+                    'rgb(255, 165, 0)',    // 6.0-7.0
+                    'rgb(255, 200, 0)',    // 5.0-6.0
+                    'rgb(255, 255, 0)',    // 4.0-5.0
+                    'rgb(200, 255, 0)',    // 3.0-4.0
+                    'rgb(150, 255, 0)',    // 2.5-3.0
+                    'rgb(0, 255, 0)',      // 2.0-2.5
+                    'rgb(0, 200, 0)',      // 1.5-2.0
+                    'rgb(0, 150, 0)',      // 1.0-1.5
+                    'rgb(0, 0, 255)',      // 0.75-1.0
+                    'rgb(0, 128, 255)',    // 0.30-0.75
+                    'rgb(0, 200, 255)',    // 0.10-0.30
+                    'rgb(0, 255, 255)'     // 0.05-0.10
+                ],
+                labels: ['24+', '20', '18', '16', '14', '12', '10', '9', '8', '7', '6', '5', '4', '3', '2.5', '2', '1.5', '1', '0.75', '0.3', '0.1', '0.05']
+            },
+            QPE48Hr: {
+                title: 'Precipitation (in) - 48 hr',
+                bands: [
+                    'rgb(255, 255, 100)',  // 32.0+
+                    'rgb(255, 255, 150)',  // 28.0-32.0
+                    'rgb(255, 255, 200)',  // 24.0-28.0
+                    'rgb(150, 100, 200)',  // 20.0-24.0
+                    'rgb(200, 0, 255)',    // 18.0-20.0
+                    'rgb(255, 0, 255)',    // 16.0-18.0
+                    'rgb(180, 0, 0)',      // 14.0-16.0
+                    'rgb(220, 0, 0)',      // 12.0-14.0
+                    'rgb(255, 0, 0)',      // 10.0-12.0
+                    'rgb(255, 50, 0)',     // 8.0-10.0
+                    'rgb(255, 100, 0)',    // 7.0-8.0
+                    'rgb(255, 140, 0)',    // 6.0-7.0
+                    'rgb(255, 165, 0)',    // 5.0-6.0
+                    'rgb(255, 200, 0)',    // 4.0-5.0
+                    'rgb(255, 255, 0)',    // 3.0-4.0
+                    'rgb(200, 255, 0)',    // 2.5-3.0
+                    'rgb(150, 255, 0)',    // 2.0-2.5
+                    'rgb(0, 255, 0)',      // 1.5-2.0
+                    'rgb(0, 200, 0)',      // 1.0-1.5
+                    'rgb(0, 150, 0)',      // 0.75-1.0
+                    'rgb(0, 0, 255)',      // 0.50-0.75
+                    'rgb(0, 128, 255)',    // 0.25-0.50
+                    'rgb(0, 200, 255)',    // 0.10-0.25
+                    'rgb(0, 255, 255)'     // 0.01-0.10
+                ],
+                labels: ['32+', '28', '24', '20', '18', '16', '14', '12', '10', '8', '7', '6', '5', '4', '3', '2.5', '2', '1.5', '1', '0.75', '0.5', '0.25', '0.1', '0.01']
+            },
+            QPE72Hr: {
+                title: 'Precipitation (in) - 72 hr',
+                bands: [
+                    'rgb(255, 255, 100)',  // 40.0+
+                    'rgb(255, 255, 150)',  // 36.0-40.0
+                    'rgb(255, 255, 200)',  // 32.0-36.0
+                    'rgb(150, 100, 200)',  // 28.0-32.0
+                    'rgb(200, 0, 255)',    // 24.0-28.0
+                    'rgb(255, 0, 255)',    // 22.0-24.0
+                    'rgb(180, 0, 0)',      // 20.0-22.0
+                    'rgb(220, 0, 0)',      // 18.0-20.0
+                    'rgb(255, 0, 0)',      // 16.0-18.0
+                    'rgb(255, 50, 0)',     // 14.0-16.0
+                    'rgb(255, 100, 0)',    // 12.0-14.0
+                    'rgb(255, 140, 0)',    // 10.0-12.0
+                    'rgb(255, 165, 0)',    // 8.0-10.0
+                    'rgb(255, 200, 0)',    // 7.0-8.0
+                    'rgb(255, 255, 0)',    // 6.0-7.0
+                    'rgb(200, 255, 0)',    // 5.0-6.0
+                    'rgb(150, 255, 0)',    // 4.0-5.0
+                    'rgb(0, 255, 0)',      // 3.0-4.0
+                    'rgb(0, 200, 0)',      // 2.0-3.0
+                    'rgb(0, 150, 0)',      // 1.5-2.0
+                    'rgb(0, 0, 255)',      // 1.0-1.5
+                    'rgb(0, 128, 255)',    // 0.50-1.0
+                    'rgb(0, 200, 255)',    // 0.25-0.50
+                    'rgb(0, 255, 255)'     // 0.10-0.25
+                ],
+                labels: ['40+', '36', '32', '28', '24', '22', '20', '18', '16', '14', '12', '10', '8', '7', '6', '5', '4', '3', '2', '1.5', '1', '0.5', '0.25', '0.1']
+            }
+        };
+
+        // Determine colorbar type based on product
+        function getColorbarType(product) {
+            if (product.includes('72H') || product.includes('72hr')) {
+                return qpeColorbars.QPE72Hr;
+            } else if (product.includes('48H') || product.includes('48hr')) {
+                return qpeColorbars.QPE48Hr;
+            } else if (product.includes('24H') || product.includes('24hr')) {
+                return qpeColorbars.QPE24Hr;
+            } else if (product.includes('06H') || product.includes('6hr') ||
+                       product.includes('12H') || product.includes('12hr')) {
+                return qpeColorbars.QPE6Hr;
+            } else {
+                return qpeColorbars.QPE15Min; // Default for 15min, 1hr, 3hr
+            }
+        }
+
+        // Update colorbar display
+        function updateColorbar(product) {
+            const colorbar = getColorbarType(product);
+            const colorbarDiv = document.getElementById('colorbar');
+
+            let html = `<h3>${colorbar.title}</h3><div class="colorbar-scale">`;
+
+            for (let i = 0; i < colorbar.bands.length; i++) {
+                html += `
+                    <div class="colorbar-item">
+                        <div class="colorbar-color" style="background-color: ${colorbar.bands[i]}"></div>
+                        <div class="colorbar-label">${colorbar.labels[i]}</div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            colorbarDiv.innerHTML = html;
+        }
+
+        // Main initialization function that runs after Leaflet loads
+        function initializeApp() {
+            // Initialize map
+            const map = L.map('map', {
+                center: [39.8283, -98.5795],
+                zoom: 5,
+                zoomControl: true
+            });
+
+            // Add dark base layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                maxZoom: 20
+            }).addTo(map);
+
+            // MRMS data layer (initially null)
+            let dataLayer = null;
+
+            // Overlay layers for state/county labels
+            const statesLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+                maxZoom: 20
+            });
+
+            // Layer control
+            const leafletOverlays = {
+                "State/County Labels": statesLayer
+            };
+            L.control.layers(null, leafletOverlays).addTo(map);
+            statesLayer.addTo(map);
+
+            // Load data button
+            const loadBtn = document.getElementById('load-btn');
+            if (loadBtn) {
+                loadBtn.addEventListener('click', async () => {
+                    const product = document.getElementById('product-select').value;
+                    const dateInput = document.getElementById('date-input').value;
+                    const timeInput = document.getElementById('time-input').value;
+                    const date = dateInput.replace(/-/g, '');
+                    const time = timeInput.replace(/:/g, '');
+                    const status = document.getElementById('status');
+                    const loading = document.getElementById('loading-indicator');
+
+                    // Build the API URL
+                    const apiUrl = `/api/tiles/download-s3?product=${product}&date=${date}&time=${time}&cacheKey=default`;
+
+                    // Build the AWS S3 URL that will be attempted
+                    const s3Url = `https://noaa-mrms-pds.s3.amazonaws.com/CONUS/${product}/${date}/MRMS_${product}_${date}-${time}.grib2.gz`;
+
+                    loadBtn.disabled = true;
+                    loading.style.display = 'block';
+                    status.textContent = 'Downloading data from AWS S3...';
+
+                    try {
+                        const response = await fetch(apiUrl, { method: 'POST' });
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            status.innerHTML = `<strong>✓ Success:</strong> ${result.message}<br><small>Expected S3 URL: ${s3Url}</small>`;
+
+                            // Remove existing data layer
+                            if (dataLayer) {
+                                map.removeLayer(dataLayer);
+                            }
+
+                            // Add new tile layer
+                            dataLayer = L.tileLayer('/api/tiles/{z}/{x}/{y}.png?dataset=default&_=' + Date.now(), {
+                                maxZoom: 20,
+                                opacity: 0.7
+                            }).addTo(map);
+
+                            // Update colorbar
+                            updateColorbar(product);
+                        } else {
+                            const errorMsg = result.message || result.title || response.statusText;
+                            status.innerHTML = `<strong>✗ Error (${response.status}):</strong> ${errorMsg}<br><small>API URL: ${apiUrl}<br>Expected S3 URL: ${s3Url}</small>`;
+                        }
+                    } catch (error) {
+                        status.innerHTML = `<strong>✗ Error:</strong> ${error.message}<br><small>API URL: ${apiUrl}<br>Expected S3 URL: ${s3Url}</small>`;
+                    } finally {
+                        loadBtn.disabled = false;
+                        loading.style.display = 'none';
+                    }
+                });
+            }
+
+            // Click on map to get value at location
+            map.on('click', async (e) => {
+                if (!dataLayer) return;
+
+                try {
+                    const response = await fetch(
+                        `/api/tiles/value?lat=${e.latlng.lat}&lon=${e.latlng.lng}&cacheKey=default`
+                    );
+                    const result = await response.json();
+
+                    if (result.value !== null) {
+                        L.popup()
+                            .setLatLng(e.latlng)
+                            .setContent(`<b>Value:</b> ${result.value.toFixed(3)}<br><b>Lat:</b> ${e.latlng.lat.toFixed(4)}<br><b>Lon:</b> ${e.latlng.lng.toFixed(4)}`)
+                            .openOn(map);
+                    }
+                } catch (error) {
+                    console.error('Error getting value:', error);
+                }
+            });
+
+            // Initialize Overlay Modules
+            const overlays = {
+                states: new StateBoundaries(map),
+                counties: new CountyBoundaries(map),
+                latlon: new LatLonGrid(map)
+            };
+
+            let currentOverlay = null;
+            const defaultSettings = {
+                states: { color: '#FFFFFF', weight: 2, opacity: 0.8 },
+                counties: { color: '#00FF00', weight: 1, opacity: 0.6 },
+                latlon: { color: '#666666', weight: 1, opacity: 0.5 }
+            };
+
+            // Overlay type selector
+            document.getElementById('overlay-type-select').addEventListener('change', (e) => {
+                const overlayType = e.target.value;
+                const optionsDiv = document.getElementById('overlay-options');
+
+                if (overlayType === '') {
+                    optionsDiv.style.display = 'none';
+                    currentOverlay = null;
+                    return;
+                }
+
+                // Show options for selected overlay
+                optionsDiv.style.display = 'block';
+                currentOverlay = overlayType;
+
+                // Set values for this overlay type from its current settings
+                const settings = defaultSettings[overlayType];
+                document.getElementById('overlay-color-picker').value = settings.color;
+                document.getElementById('overlay-color-preview').textContent = settings.color;
+                document.getElementById('overlay-weight-slider').value = settings.weight;
+                document.getElementById('overlay-weight-value').textContent = settings.weight;
+                document.getElementById('overlay-opacity-slider').value = settings.opacity;
+                document.getElementById('overlay-opacity-value').textContent = settings.opacity;
+
+                // Set checkbox to reflect current state of this overlay
+                document.getElementById('overlay-toggle').checked = overlays[overlayType].isEnabled();
+
+                // Update label
+                const labels = {
+                    states: 'Show State Lines',
+                    counties: 'Show County Lines',
+                    latlon: 'Show Lat/Lon Grid'
+                };
+                document.getElementById('overlay-toggle-label').textContent = labels[overlayType];
+
+                // Apply settings to overlay (this doesn't turn it on/off, just updates appearance)
+                overlays[overlayType].setColor(settings.color);
+                overlays[overlayType].setWeight(settings.weight);
+                overlays[overlayType].setOpacity(settings.opacity);
+            });
+
+            // Toggle overlay on/off
+            document.getElementById('overlay-toggle').addEventListener('change', (e) => {
+                if (currentOverlay) {
+                    overlays[currentOverlay].toggle(e.target.checked);
+                }
+            });
+
+            // Color picker
+            document.getElementById('overlay-color-picker').addEventListener('input', (e) => {
+                if (currentOverlay) {
+                    const color = e.target.value;
+                    overlays[currentOverlay].setColor(color);
+                    document.getElementById('overlay-color-preview').textContent = color.toUpperCase();
+                    defaultSettings[currentOverlay].color = color;
+                }
+            });
+
+            // Weight slider
+            document.getElementById('overlay-weight-slider').addEventListener('input', (e) => {
+                if (currentOverlay) {
+                    const weight = e.target.value;
+                    overlays[currentOverlay].setWeight(weight);
+                    document.getElementById('overlay-weight-value').textContent = weight;
+                    defaultSettings[currentOverlay].weight = weight;
+                }
+            });
+
+            // Opacity slider
+            document.getElementById('overlay-opacity-slider').addEventListener('input', (e) => {
+                if (currentOverlay) {
+                    const opacity = e.target.value;
+                    overlays[currentOverlay].setOpacity(opacity);
+                    document.getElementById('overlay-opacity-value').textContent = opacity;
+                    defaultSettings[currentOverlay].opacity = opacity;
+                }
+            });
+        } // End of initializeApp function
+
+        // Track if app has been initialized
+        let appInitialized = false;
+
+        function safeInitializeApp() {
+            if (appInitialized) return;
+            appInitialized = true;
+            initializeApp();
+        }
+    </script>
+
+    <!-- Load Leaflet after defining the function -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""
+            onload="safeInitializeApp()"></script>
+</body>
+</html>
