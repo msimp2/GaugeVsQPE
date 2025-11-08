@@ -175,107 +175,107 @@
         #overlay-controls {
             background-color: #2c3e50;
             color: white;
-            padding: 20px;
-            border-top: 2px solid #34495e;
+            padding: 8px 12px;
+            border-top: 1px solid #34495e;
         }
 
         #overlay-controls h2 {
-            font-size: 18px;
-            margin-bottom: 15px;
+            font-size: 12px;
+            margin-bottom: 6px;
             color: #ecf0f1;
         }
 
         .overlay-section {
-            margin-bottom: 20px;
-            padding: 15px;
+            margin-bottom: 6px;
+            padding: 6px;
             background-color: rgba(52, 73, 94, 0.5);
-            border-radius: 6px;
+            border-radius: 3px;
         }
 
         .overlay-section h3 {
-            font-size: 14px;
-            margin-bottom: 12px;
+            font-size: 10px;
+            margin-bottom: 4px;
             color: #3498db;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
         }
 
         .overlay-control-row {
             display: flex;
             align-items: center;
-            gap: 15px;
-            margin-bottom: 10px;
+            gap: 6px;
+            margin-bottom: 4px;
         }
 
         .overlay-control-row label {
-            font-size: 13px;
-            min-width: 100px;
+            font-size: 10px;
+            min-width: 60px;
             color: #ecf0f1;
         }
 
         .overlay-toggle {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
         }
 
         .overlay-toggle input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 14px;
+            height: 14px;
             cursor: pointer;
         }
 
         .color-picker-wrapper {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 4px;
         }
 
         .color-picker-wrapper input[type="color"] {
-            width: 50px;
-            height: 35px;
+            width: 30px;
+            height: 22px;
             border: none;
-            border-radius: 4px;
+            border-radius: 2px;
             cursor: pointer;
         }
 
         .color-preview {
-            padding: 6px 12px;
+            padding: 2px 6px;
             background-color: rgba(0, 0, 0, 0.3);
-            border-radius: 4px;
+            border-radius: 2px;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 9px;
         }
 
         .slider-wrapper {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 4px;
             flex: 1;
         }
 
         .slider-wrapper input[type="range"] {
             flex: 1;
-            height: 6px;
-            border-radius: 3px;
+            height: 4px;
+            border-radius: 2px;
             background: #34495e;
             outline: none;
             cursor: pointer;
         }
 
         .slider-wrapper input[type="range"]::-webkit-slider-thumb {
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background: #3498db;
             cursor: pointer;
         }
 
         .slider-value {
-            min-width: 30px;
+            min-width: 20px;
             text-align: center;
             font-family: monospace;
-            font-size: 13px;
+            font-size: 9px;
             color: #ecf0f1;
         }
     </style>
@@ -342,22 +342,20 @@
 
     <!-- Overlay Controls -->
     <div id="overlay-controls">
-        <h2>Map Overlays & Options</h2>
+        <h2>Map Overlays</h2>
 
         <div class="overlay-section">
-            <h3>Overlay Selection</h3>
-
             <div class="overlay-control-row">
-                <label>Select Overlay:</label>
-                <select id="overlay-type-select" style="padding: 8px 12px; border-radius: 4px; font-size: 14px; min-width: 200px;">
+                <label>Overlay:</label>
+                <select id="overlay-type-select" style="padding: 4px 6px; border-radius: 2px; font-size: 10px; min-width: 120px;">
                     <option value="">-- None --</option>
                     <option value="states">State Boundaries</option>
                     <option value="counties">County Boundaries</option>
-                    <option value="latlon">Latitude/Longitude Grid</option>
+                    <option value="latlon">Lat/Lon Grid</option>
                 </select>
             </div>
 
-            <div id="overlay-options" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div id="overlay-options" style="display: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1);">
                 <div class="overlay-control-row">
                     <label class="overlay-toggle">
                         <input type="checkbox" id="overlay-toggle">
