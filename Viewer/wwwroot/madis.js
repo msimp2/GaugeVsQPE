@@ -74,8 +74,20 @@ function convertToMM(value, unit) {
     return value;
 }
 
-// Plot MADIS data
-function plotMadisData(map) {
+// Get MRMS value at lat/lon from API
+async function getMrmsValueAt(lat, lon) {
+    try {
+        const response = await fetch(`/api/tiles/value?lat=${lat}&lon=${lon}&cacheKey=default`);
+        const result = await response.json();
+        return result.value;
+    } catch (error) {
+        console.error('Error fetching MRMS value:', error);
+        return null;
+    }
+}
+
+// Plot MADIS data with MRMS comparison
+async function plotMadisData(map) {
     if (!map) {
         console.error("Leaflet map is not initialized.");
         return;
@@ -91,37 +103,56 @@ function plotMadisData(map) {
 
     const unit = 'in'; // Inches to match MRMS
 
-    for (const item of window.madisData) {
-        const { stationId, obvTime, provider, value, lat, lon } = item;
-
-        if (
-            !isNaN(lat) && !isNaN(lon) &&
-            lat >= lowerLat && lat <= upperLat &&
-            lon >= lowerLon && lon <= upperLon &&
-            value > 0 // Only show non-zero values
-        ) {
+    // Fetch MRMS values for all gauges in parallel
+    const gaugePromises = window.madisData
+        .filter(item => {
+            const { lat, lon, value } = item;
+            return !isNaN(lat) && !isNaN(lon) &&
+                   lat >= lowerLat && lat <= upperLat &&
+                   lon >= lowerLon && lon <= upperLon &&
+                   value > 0;
+        })
+        .map(async (item) => {
+            const { stationId, obvTime, provider, value, lat, lon } = item;
             const displayValue = convertFromMM(value, unit);
 
-            if (!isFinite(displayValue) || isNaN(displayValue)) continue;
+            if (!isFinite(displayValue) || isNaN(displayValue)) return null;
 
-            // Use MRMS colormap
-            const fillColor = getPrecipColor(displayValue);
+            // Fetch MRMS value at this location
+            const mrmsValue = await getMrmsValueAt(lat, lon);
 
-            L.circleMarker([lat, lon], {
-                radius: 6,
-                color: '#333',
-                fillColor: fillColor,
-                fillOpacity: 0.85,
-                weight: 1
-            })
-                .addTo(window.madisMarkersLayer)
-                .bindPopup(
-                    `<strong>${stationId}</strong><br/>` +
-                    `Obs Time: ${obvTime}<br/>` +
-                    `Provider: ${provider}<br/>` +
-                    `1-Hr Precip: ${displayValue.toFixed(2)} ${unit}`
-                );
-        }
+            return { stationId, obvTime, provider, displayValue, mrmsValue, lat, lon };
+        });
+
+    const gaugeData = await Promise.all(gaugePromises);
+
+    // Plot gauges
+    for (const data of gaugeData) {
+        if (!data) continue;
+
+        const { stationId, obvTime, provider, displayValue, mrmsValue, lat, lon } = data;
+
+        // Use MRMS colormap
+        const fillColor = getPrecipColor(displayValue);
+
+        const mrmsText = mrmsValue !== null && mrmsValue !== undefined
+            ? `<strong>MRMS:</strong> ${mrmsValue.toFixed(2)} ${unit}<br/><strong>Gauge:</strong> ${displayValue.toFixed(2)} ${unit}`
+            : `<strong>Gauge:</strong> ${displayValue.toFixed(2)} ${unit}`;
+
+        L.circleMarker([lat, lon], {
+            radius: 6,
+            color: '#333',
+            fillColor: fillColor,
+            fillOpacity: 0.85,
+            weight: 1
+        })
+            .addTo(window.madisMarkersLayer)
+            .bindPopup(
+                `<strong>${stationId}</strong><br/>` +
+                `Obs Time: ${obvTime}<br/>` +
+                `Provider: ${provider}<br/>` +
+                mrmsText
+            );
     }
 
     // Don't add legend - MRMS colorbar will be visible
