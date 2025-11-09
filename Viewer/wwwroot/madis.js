@@ -1,4 +1,41 @@
-import { jetColor, addJetColormapLegend } from './precipColorMap.js';
+// MRMS QPE colorbar for 1-hour precipitation (0.01 to 8.0+ inches)
+const qpeColorMap = {
+    thresholds: [8.0, 7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0, 3.0, 2.0, 1.75, 1.25, 1.00, 0.80, 0.60, 0.40, 0.20, 0.10, 0.05, 0.01],
+    colors: [
+        'rgb(255, 255, 200)',  // 8.0+
+        'rgb(150, 100, 200)',  // 7.0-8.0
+        'rgb(200, 0, 255)',    // 6.5-7.0
+        'rgb(255, 0, 255)',    // 6.0-6.5
+        'rgb(180, 0, 0)',      // 5.5-6.0
+        'rgb(220, 0, 0)',      // 5.0-5.5
+        'rgb(255, 0, 0)',      // 4.5-5.0
+        'rgb(255, 50, 0)',     // 4.0-4.5
+        'rgb(255, 100, 0)',    // 3.0-4.0
+        'rgb(255, 165, 0)',    // 2.0-3.0
+        'rgb(255, 200, 0)',    // 1.75-2.0
+        'rgb(255, 255, 0)',    // 1.25-1.75
+        'rgb(150, 255, 0)',    // 1.00-1.25
+        'rgb(0, 255, 0)',      // 0.80-1.00
+        'rgb(0, 200, 0)',      // 0.60-0.80
+        'rgb(0, 150, 0)',      // 0.40-0.60
+        'rgb(0, 0, 255)',      // 0.20-0.40
+        'rgb(0, 128, 255)',    // 0.10-0.20
+        'rgb(0, 200, 255)',    // 0.05-0.10
+        'rgb(0, 255, 255)'     // 0.01-0.05
+    ]
+};
+
+// Get color for precipitation value using MRMS colormap
+function getPrecipColor(valueInInches) {
+    if (valueInInches < 0.01) return 'rgb(200, 200, 200)'; // Gray for trace/zero
+
+    for (let i = 0; i < qpeColorMap.thresholds.length; i++) {
+        if (valueInInches >= qpeColorMap.thresholds[i]) {
+            return qpeColorMap.colors[i];
+        }
+    }
+    return qpeColorMap.colors[qpeColorMap.colors.length - 1]; // Lowest color
+}
 
 // Build MADIS URL for 1-hour precipitation
 function buildMadisUrl(startDate, startHour, startMinute, lookBack, lookForward) {
@@ -37,14 +74,6 @@ function convertToMM(value, unit) {
     return value;
 }
 
-// Get colormap bounds
-function getColormapBounds() {
-    const unit = 'in'; // Fixed to inches for consistency with MRMS
-    const vmin = 0;
-    const vmax = 1.0; // 1 inch max for 1-hour precip
-    return { vmin, vmax, unit };
-}
-
 // Plot MADIS data
 function plotMadisData(map) {
     if (!map) {
@@ -60,7 +89,7 @@ function plotMadisData(map) {
     const upperLat = 60.0;
     const upperLon = -60.0;
 
-    const { vmin, vmax, unit } = getColormapBounds();
+    const unit = 'in'; // Inches to match MRMS
 
     for (const item of window.madisData) {
         const { stationId, obvTime, provider, value, lat, lon } = item;
@@ -75,11 +104,14 @@ function plotMadisData(map) {
 
             if (!isFinite(displayValue) || isNaN(displayValue)) continue;
 
+            // Use MRMS colormap
+            const fillColor = getPrecipColor(displayValue);
+
             L.circleMarker([lat, lon], {
-                radius: 5,
+                radius: 6,
                 color: '#333',
-                fillColor: jetColor(displayValue, vmin, vmax),
-                fillOpacity: 0.8,
+                fillColor: fillColor,
+                fillOpacity: 0.85,
                 weight: 1
             })
                 .addTo(window.madisMarkersLayer)
@@ -92,13 +124,7 @@ function plotMadisData(map) {
         }
     }
 
-    // Update legend
-    addJetColormapLegend({
-        vmin,
-        vmax,
-        title: 'Gauge 1-Hr',
-        units: unit
-    });
+    // Don't add legend - MRMS colorbar will be visible
 }
 
 // Fetch, parse, and plot CSV

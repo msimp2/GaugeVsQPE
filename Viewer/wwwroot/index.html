@@ -709,26 +709,36 @@
                     loading.style.display = 'block';
 
                     try {
+                        console.log('Fetching MRMS data:', apiUrl);
                         const response = await fetch(apiUrl, { method: 'POST' });
-                        const result = await response.json();
 
-                        if (response.ok) {
-                            // Remove existing data layer
-                            if (dataLayer) {
-                                map.removeLayer(dataLayer);
-                            }
+                        console.log('Response status:', response.status);
 
-                            // Add new tile layer
-                            dataLayer = L.tileLayer('/api/tiles/{z}/{x}/{y}.png?dataset=default&_=' + Date.now(), {
-                                maxZoom: 20,
-                                opacity: 0.7
-                            }).addTo(map);
-
-                            // Update colorbar
-                            updateColorbar(product);
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error('Error response:', errorText);
+                            throw new Error(`Server returned ${response.status}: ${errorText}`);
                         }
+
+                        const result = await response.json();
+                        console.log('Load result:', result);
+
+                        // Remove existing data layer
+                        if (dataLayer) {
+                            map.removeLayer(dataLayer);
+                        }
+
+                        // Add new tile layer
+                        dataLayer = L.tileLayer('/api/tiles/{z}/{x}/{y}.png?dataset=default&_=' + Date.now(), {
+                            maxZoom: 20,
+                            opacity: 0.7
+                        }).addTo(map);
+
+                        // Update colorbar
+                        updateColorbar(product);
                     } catch (error) {
-                        console.error('Error loading data:', error);
+                        console.error('Error loading MRMS data:', error);
+                        alert('Error loading MRMS data: ' + error.message);
                     } finally {
                         loadBtn.disabled = false;
                         loading.style.display = 'none';
