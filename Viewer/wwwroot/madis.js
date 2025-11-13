@@ -168,6 +168,13 @@ async function plotMadisData(map) {
     // Check if bias mode is enabled
     const biasMode = document.getElementById('bias-toggle')?.checked || false;
 
+    // Update total gauges loaded (before filtering by value > 0)
+    const totalGaugesLoaded = window.madisData.length;
+    const totalLoadedEl = document.getElementById('stat-total-loaded');
+    if (totalLoadedEl) {
+        totalLoadedEl.textContent = totalGaugesLoaded;
+    }
+
     // Fetch MRMS values for all gauges in parallel
     const gaugePromises = window.madisData
         .filter(item => {
@@ -199,6 +206,12 @@ async function plotMadisData(map) {
 
     // Store full gauge data globally for filtering by map bounds
     window.fullGaugeData = gaugeData.filter(d => d !== null);
+
+    // Update total gauges with data > 0 (gauges actually plotted)
+    const totalWithDataEl = document.getElementById('stat-total-with-data');
+    if (totalWithDataEl) {
+        totalWithDataEl.textContent = window.fullGaugeData.length;
+    }
 
     // Plot gauges
     for (const data of gaugeData) {

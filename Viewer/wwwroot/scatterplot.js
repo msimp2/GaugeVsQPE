@@ -126,6 +126,7 @@
                 this.data = [];
                 this.chart.data.datasets[0].data = [];
                 this.chart.update();
+                this.updateStatistics([]);
                 return;
             }
 
@@ -153,6 +154,102 @@
             }
 
             this.chart.update();
+
+            // Update statistics display
+            this.updateStatistics(scatterData);
+        }
+
+        calculateStatistics(data) {
+            if (!data || data.length === 0) {
+                return {
+                    meanBias: null,
+                    additiveBias: null,
+                    mae: null,
+                    rmse: null,
+                    cc: null
+                };
+            }
+
+            const n = data.length;
+            let sumGauge = 0;
+            let sumRadar = 0;
+            let sumAbsError = 0;
+            let sumSqError = 0;
+            let sumGaugeRadar = 0;
+            let sumGaugeSq = 0;
+            let sumRadarSq = 0;
+
+            // Calculate sums
+            for (const point of data) {
+                const gauge = point.x;
+                const radar = point.y;
+                const error = gauge - radar;
+
+                sumGauge += gauge;
+                sumRadar += radar;
+                sumAbsError += Math.abs(error);
+                sumSqError += error * error;
+                sumGaugeRadar += gauge * radar;
+                sumGaugeSq += gauge * gauge;
+                sumRadarSq += radar * radar;
+            }
+
+            // Mean Bias (multiplicative): sum(gauge) / sum(radar)
+            const meanBias = sumRadar > 0 ? sumGauge / sumRadar : null;
+
+            // Additive Bias: sum(gauge) - sum(radar)
+            const additiveBias = sumGauge - sumRadar;
+
+            // MAE: mean absolute error
+            const mae = sumAbsError / n;
+
+            // RMSE: root mean square error
+            const rmse = Math.sqrt(sumSqError / n);
+
+            // Correlation Coefficient (Pearson's r)
+            const meanGauge = sumGauge / n;
+            const meanRadar = sumRadar / n;
+
+            let numerator = 0;
+            let denomGauge = 0;
+            let denomRadar = 0;
+
+            for (const point of data) {
+                const gaugeDiff = point.x - meanGauge;
+                const radarDiff = point.y - meanRadar;
+                numerator += gaugeDiff * radarDiff;
+                denomGauge += gaugeDiff * gaugeDiff;
+                denomRadar += radarDiff * radarDiff;
+            }
+
+            const cc = (denomGauge > 0 && denomRadar > 0)
+                ? numerator / Math.sqrt(denomGauge * denomRadar)
+                : null;
+
+            return {
+                meanBias: meanBias,
+                additiveBias: additiveBias,
+                mae: mae,
+                rmse: rmse,
+                cc: cc
+            };
+        }
+
+        updateStatistics(data) {
+            const stats = this.calculateStatistics(data);
+
+            // Update the statistics display with safety checks
+            const meanBiasEl = document.getElementById('stat-mean-bias');
+            const addBiasEl = document.getElementById('stat-add-bias');
+            const maeEl = document.getElementById('stat-mae');
+            const rmseEl = document.getElementById('stat-rmse');
+            const ccEl = document.getElementById('stat-cc');
+
+            if (meanBiasEl) meanBiasEl.textContent = stats.meanBias !== null ? stats.meanBias.toFixed(2) : '--';
+            if (addBiasEl) addBiasEl.textContent = stats.additiveBias !== null ? stats.additiveBias.toFixed(2) : '--';
+            if (maeEl) maeEl.textContent = stats.mae !== null ? stats.mae.toFixed(2) : '--';
+            if (rmseEl) rmseEl.textContent = stats.rmse !== null ? stats.rmse.toFixed(2) : '--';
+            if (ccEl) ccEl.textContent = stats.cc !== null ? stats.cc.toFixed(2) : '--';
         }
 
         clearData() {
