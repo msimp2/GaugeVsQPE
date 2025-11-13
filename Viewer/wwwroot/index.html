@@ -383,6 +383,16 @@
                     </div>
                 </div>
 
+                <div style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; cursor: pointer; font-size: 12px;">
+                        <input type="checkbox" id="show-zero-mrms-toggle" style="margin-right: 8px;">
+                        <span>Show Gauge > 0, MRMS = 0</span>
+                    </label>
+                    <div style="font-size: 10px; color: #7f8c8d; margin-left: 24px; margin-top: 4px;">
+                        Show gauges with precip where radar detected none
+                    </div>
+                </div>
+
                 <!-- Statistics Panel -->
                 <div id="statistics-panel" style="background-color: white; padding: 8px; border-radius: 4px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <h3 style="font-size: 11px; color: #2c3e50; margin-bottom: 6px; font-weight: bold;">Gauge Statistics</h3>
@@ -544,6 +554,17 @@
                     }
 
                     // Replot gauges with new coloring (don't refetch data)
+                    if (window.madisController && window.madisController.replotGauges) {
+                        window.madisController.replotGauges();
+                    }
+                });
+            }
+
+            // Add show zero MRMS toggle event listener
+            const showZeroMrmsToggle = document.getElementById('show-zero-mrms-toggle');
+            if (showZeroMrmsToggle) {
+                showZeroMrmsToggle.addEventListener('change', async (e) => {
+                    // Replot gauges with the new filter setting
                     if (window.madisController && window.madisController.replotGauges) {
                         window.madisController.replotGauges();
                     }

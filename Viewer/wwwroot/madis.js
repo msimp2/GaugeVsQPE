@@ -185,6 +185,9 @@ async function plotMadisData(map) {
     // Check if bias mode is enabled
     const biasMode = document.getElementById('bias-toggle')?.checked || false;
 
+    // Check if user wants to see gauge > 0, MRMS = 0 cases
+    const showZeroMrms = document.getElementById('show-zero-mrms-toggle')?.checked || false;
+
     // Update total gauges loaded (before filtering by value > 0)
     const totalGaugesLoaded = window.madisData.length;
     const totalLoadedEl = document.getElementById('stat-total-loaded');
@@ -214,8 +217,15 @@ async function plotMadisData(map) {
 
         // Calculate bias with special handling for edge cases
         let biasRatio = null;
-        if (displayValue > 0 && (mrmsValue === null || mrmsValue === 0 || mrmsValue < 0.001)) {
-            // Gauge detected precip but MRMS didn't - set bias to 11 (extreme overestimation)
+        const mrmsIsZero = mrmsValue === null || mrmsValue === 0 || mrmsValue < 0.001;
+
+        if (displayValue > 0 && mrmsIsZero) {
+            // Gauge detected precip but MRMS didn't
+            if (!showZeroMrms) {
+                // User doesn't want to see these, skip this gauge
+                return null;
+            }
+            // Set bias to 11 (extreme overestimation)
             biasRatio = 11;
         } else if (mrmsValue !== null && mrmsValue !== undefined && mrmsValue >= 0.001) {
             // Normal case: both have values
