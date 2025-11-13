@@ -398,3 +398,5 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+Viewer/nul
+Viewer/wwwroot/nul
