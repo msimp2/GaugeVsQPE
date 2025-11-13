@@ -967,26 +967,7 @@
                 });
             }
 
-            // Click on map to get value at location
-            map.on('click', async (e) => {
-                if (!dataLayer) return;
-
-                try {
-                    const response = await fetch(
-                        `/api/tiles/value?lat=${e.latlng.lat}&lon=${e.latlng.lng}&cacheKey=default`
-                    );
-                    const result = await response.json();
-
-                    if (result.value !== null) {
-                        L.popup()
-                            .setLatLng(e.latlng)
-                            .setContent(`<b>Value:</b> ${result.value.toFixed(3)}<br><b>Lat:</b> ${e.latlng.lat.toFixed(4)}<br><b>Lon:</b> ${e.latlng.lng.toFixed(4)}`)
-                            .openOn(map);
-                    }
-                } catch (error) {
-                    console.error('Error getting value:', error);
-                }
-            });
+            // Note: Map click handler removed - popups only appear when clicking gauge markers
 
             // Initialize Overlay Modules
             const overlays = {
