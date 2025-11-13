@@ -1,0 +1,174 @@
+// Scatterplot Module for Gauge vs Radar QPE Comparison
+(function(window) {
+    'use strict';
+
+    class ScatterplotManager {
+        constructor(canvasId) {
+            this.canvas = document.getElementById(canvasId);
+            this.chart = null;
+            this.data = [];
+            this.initializeChart();
+        }
+
+        initializeChart() {
+            const ctx = this.canvas.getContext('2d');
+
+            this.chart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Gauge vs Radar QPE',
+                        data: [],
+                        backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                        borderColor: 'rgba(52, 152, 219, 1)',
+                        borderWidth: 1,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Gauge QPE vs Radar QPE',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = context.raw;
+                                    const lines = [
+                                        `Gauge: ${point.x.toFixed(3)} in`,
+                                        `Radar: ${point.y.toFixed(3)} in`
+                                    ];
+                                    if (point.bias !== null && point.bias !== undefined) {
+                                        lines.push(`Bias: ${point.bias.toFixed(2)}`);
+                                    }
+                                    return lines;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Gauge QPE (inches)',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            min: 0,
+                            max: 5,
+                            ticks: {
+                                stepSize: 0.5
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            title: {
+                                display: true,
+                                text: 'Radar QPE (inches)',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            min: 0,
+                            max: 5,
+                            ticks: {
+                                stepSize: 0.5
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Add 1:1 reference line
+            this.addReferenceLine();
+        }
+
+        addReferenceLine() {
+            // Add a diagonal 1:1 line as a separate dataset
+            const refLineData = [
+                { x: 0, y: 0 },
+                { x: 10, y: 10 }
+            ];
+
+            this.chart.data.datasets.push({
+                label: '1:1 Line',
+                data: refLineData,
+                type: 'line',
+                borderColor: 'rgba(231, 76, 60, 0.8)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false,
+                showLine: true
+            });
+
+            this.chart.update('none');
+        }
+
+        updateData(gaugeData, biasMode = false) {
+            if (!gaugeData || gaugeData.length === 0) {
+                this.data = [];
+                this.chart.data.datasets[0].data = [];
+                this.chart.update();
+                return;
+            }
+
+            // Filter out data points where MRMS value is null/undefined
+            const scatterData = gaugeData
+                .filter(d => d.mrmsValue !== null && d.mrmsValue !== undefined && d.displayValue > 0)
+                .map(d => ({
+                    x: d.displayValue,  // Gauge value
+                    y: d.mrmsValue,      // Radar value
+                    bias: d.biasRatio
+                }));
+
+            this.data = scatterData;
+            this.chart.data.datasets[0].data = scatterData;
+
+            // Auto-adjust scales based on data
+            if (scatterData.length > 0) {
+                const maxGauge = Math.max(...scatterData.map(d => d.x));
+                const maxRadar = Math.max(...scatterData.map(d => d.y));
+                const maxVal = Math.max(maxGauge, maxRadar);
+                const scaleMax = Math.ceil(maxVal * 1.2); // Add 20% padding
+
+                this.chart.options.scales.x.max = scaleMax;
+                this.chart.options.scales.y.max = scaleMax;
+            }
+
+            this.chart.update();
+        }
+
+        clearData() {
+            this.data = [];
+            this.chart.data.datasets[0].data = [];
+            this.chart.options.scales.x.max = 5;
+            this.chart.options.scales.y.max = 5;
+            this.chart.update();
+        }
+
+        getData() {
+            return this.data;
+        }
+    }
+
+    // Export to global scope
+    window.ScatterplotManager = ScatterplotManager;
+
+})(window);

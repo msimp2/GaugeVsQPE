@@ -36,21 +36,55 @@ function getPrecipColor(valueInInches) {
     }
     return qpeColorMap.colors[qpeColorMap.colors.length - 1]; // Lowest color
 }
+// Get color for bias value (gauge/QPE ratio)
+function getBiasColor(biasRatio) {
+    if (biasRatio === null || biasRatio === undefined || !isFinite(biasRatio)) {
+        return 'rgb(200, 200, 200)'; // Gray for invalid
+    }
 
-// Build MADIS URL for 1-hour precipitation
-function buildMadisUrl(startDate, startHour, startMinute, lookBack, lookForward) {
+    // Positive bias (gauge > QPE) - light to dark red
+    if (biasRatio >= 10) return 'rgb(139, 0, 0)';
+    if (biasRatio >= 5) return 'rgb(178, 34, 34)';
+    if (biasRatio >= 2.5) return 'rgb(205, 92, 92)';
+    if (biasRatio >= 2.0) return 'rgb(220, 120, 120)';
+    if (biasRatio >= 1.6) return 'rgb(235, 150, 150)';
+    if (biasRatio >= 1.3) return 'rgb(245, 180, 180)';
+    if (biasRatio >= 1.1) return 'rgb(255, 210, 210)';
+    if (biasRatio >= 1.0) return 'rgb(255, 230, 230)';
+
+    // Near neutral
+    if (biasRatio >= 0.9) return 'rgb(245, 245, 245)';
+
+    // Negative bias (gauge < QPE) - light to dark blue/purple
+    if (biasRatio >= 0.77) return 'rgb(230, 230, 255)';
+    if (biasRatio >= 0.625) return 'rgb(210, 210, 255)';
+    if (biasRatio >= 0.5) return 'rgb(180, 180, 245)';
+    if (biasRatio >= 0.4) return 'rgb(150, 150, 235)';
+    if (biasRatio >= 0.2) return 'rgb(120, 120, 220)';
+    if (biasRatio >= 0.1) return 'rgb(92, 92, 205)';
+    if (biasRatio > 0) return 'rgb(34, 34, 178)';
+
+    return 'rgb(0, 0, 139)'; // Very low bias
+}
+
+// Build MADIS URL for precipitation (1-hour or 24-hour)
+function buildMadisUrl(startDate, startHour, startMinute, lookBack, lookForward, accumPeriod = '1H') {
     // Fixed bounds: -130 to -60 longitude, 20 to 60 latitude
     const latLower = 20.0;
     const latUpper = 60.0;
     const lonLower = -130.0;
     const lonUpper = -60.0;
 
-    return `https://madis-data.ncep.noaa.gov/madisPublic1/cgi-bin/madisXmlPublicDir?rdr=&time=${startDate}_${startHour}${startMinute}&minbck=-${lookBack}&minfwd=${lookForward}&recwin=4&dfltrsel=0&state=&latll=${latLower}&lonll=${lonLower}&latur=${latUpper}&lonur=${lonUpper}&stanam=&stasel=0&pvdrsel=0&varsel=1&qctype=0&qcsel=0&xml=5&csvmiss=0&nvars=PCP1H&nvars=LAT&nvars=LON`;
+    // Select the correct precipitation variable based on accumulation period
+    const pcpVar = accumPeriod === '24H' ? 'PCP24H' : 'PCP1H';
+
+    return `https://madis-data.ncep.noaa.gov/madisPublic1/cgi-bin/madisXmlPublicDir?rdr=&time=${startDate}_${startHour}${startMinute}&minbck=-${lookBack}&minfwd=${lookForward}&recwin=4&dfltrsel=0&state=&latll=${latLower}&lonll=${lonLower}&latur=${latUpper}&lonur=${lonUpper}&stanam=&stasel=0&pvdrsel=0&varsel=1&qctype=0&qcsel=0&xml=5&csvmiss=0&nvars=${pcpVar}&nvars=LAT&nvars=LON`;
 }
 
 // Store parsed MADIS data globally
 window.madisData = [];
 window.madisMarkersLayer = null;
+window.fullGaugeData = []; // Store processed gauge data with MRMS values for filtering
 
 // Clear markers
 function clearMadisMarkers(map) {
@@ -86,6 +120,34 @@ async function getMrmsValueAt(lat, lon) {
     }
 }
 
+
+// Filter gauge data by map bounds and update scatterplot
+function updateScatterplotByBounds(map) {
+    if (!map || !window.fullGaugeData || window.fullGaugeData.length === 0) {
+        return;
+    }
+
+    // Get current map bounds
+    const bounds = map.getBounds();
+    const south = bounds.getSouth();
+    const north = bounds.getNorth();
+    const west = bounds.getWest();
+    const east = bounds.getEast();
+
+    // Filter gauge data to only include gauges within current map bounds
+    const filteredData = window.fullGaugeData.filter(d => {
+        if (!d) return false;
+        return d.lat >= south && d.lat <= north && d.lon >= west && d.lon <= east;
+    });
+
+    // Check if bias mode is enabled
+    const biasMode = document.getElementById('bias-toggle')?.checked || false;
+
+    // Update scatterplot with filtered data
+    if (window.scatterplotManager) {
+        window.scatterplotManager.updateData(filteredData, biasMode);
+    }
+}
 // Plot MADIS data with MRMS comparison
 async function plotMadisData(map) {
     if (!map) {
@@ -102,6 +164,9 @@ async function plotMadisData(map) {
     const upperLon = -60.0;
 
     const unit = 'in'; // Inches to match MRMS
+
+    // Check if bias mode is enabled
+    const biasMode = document.getElementById('bias-toggle')?.checked || false;
 
     // Fetch MRMS values for all gauges in parallel
     const gaugePromises = window.madisData
@@ -121,19 +186,28 @@ async function plotMadisData(map) {
             // Fetch MRMS value at this location
             const mrmsValue = await getMrmsValueAt(lat, lon);
 
-            return { stationId, obvTime, provider, displayValue, mrmsValue, lat, lon };
+            // Calculate bias if MRMS value is available
+            let biasRatio = null;
+            if (mrmsValue !== null && mrmsValue !== undefined && mrmsValue > 0.001) {
+                biasRatio = displayValue / mrmsValue;
+            }
+
+            return { stationId, obvTime, provider, displayValue, mrmsValue, biasRatio, lat, lon };
         });
 
     const gaugeData = await Promise.all(gaugePromises);
+
+    // Store full gauge data globally for filtering by map bounds
+    window.fullGaugeData = gaugeData.filter(d => d !== null);
 
     // Plot gauges
     for (const data of gaugeData) {
         if (!data) continue;
 
-        const { stationId, obvTime, provider, displayValue, mrmsValue, lat, lon } = data;
+        const { stationId, obvTime, provider, displayValue, mrmsValue, biasRatio, lat, lon } = data;
 
-        // Use MRMS colormap
-        const fillColor = getPrecipColor(displayValue);
+        // Choose color based on mode
+        const fillColor = biasMode ? getBiasColor(biasRatio) : getPrecipColor(displayValue);
 
         const mrmsText = mrmsValue !== null && mrmsValue !== undefined
             ? `<strong>MRMS:</strong> ${mrmsValue.toFixed(2)} ${unit}<br/><strong>Gauge:</strong> ${displayValue.toFixed(2)} ${unit}`
@@ -153,6 +227,11 @@ async function plotMadisData(map) {
                 `Provider: ${provider}<br/>` +
                 mrmsText
             );
+    }
+
+    // Update scatterplot with gauge data
+    if (window.scatterplotManager) {
+        window.scatterplotManager.updateData(window.fullGaugeData, biasMode);
     }
 
     // Don't add legend - MRMS colorbar will be visible
@@ -207,8 +286,8 @@ export function initializeMadis(map) {
 
     // Return functions that can be called externally
     return {
-        loadMadisData: async function(date, hour, minute, lookBack, lookForward) {
-            const madisUrl = buildMadisUrl(date, hour, minute, lookBack, lookForward);
+        loadMadisData: async function(date, hour, minute, lookBack, lookForward, accumPeriod) {
+            const madisUrl = buildMadisUrl(date, hour, minute, lookBack, lookForward, accumPeriod);
             console.log('MADIS URL:', madisUrl);
 
             const proxyUrl = `/api/madisproxy?url=${encodeURIComponent(madisUrl)}`;
@@ -230,6 +309,14 @@ export function initializeMadis(map) {
                     map.removeLayer(window.madisMarkersLayer);
                 }
             }
+        },
+        updateScatterplotByBounds: function() {
+            updateScatterplotByBounds(map);
+        }
+,
+        replotGauges: function() {
+            // Replot gauges with current data (useful for bias mode toggle)
+            plotMadisData(map);
         }
     };
 }
