@@ -850,19 +850,6 @@
             // MRMS data layer (initially null)
             let dataLayer = null;
 
-            // Overlay layers for state/county labels
-            const statesLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-                maxZoom: 20
-            });
-
-            // Layer control
-            const leafletOverlays = {
-                "State/County Labels": statesLayer
-            };
-            L.control.layers(null, leafletOverlays).addTo(map);
-            statesLayer.addTo(map);
-
             // Load data button
             const loadBtn = document.getElementById('load-btn');
             if (loadBtn) {
