@@ -3,15 +3,18 @@
     'use strict';
 
     class ScatterplotManager {
-        constructor(canvasId) {
+        constructor(canvasId, map) {
             this.canvas = document.getElementById(canvasId);
             this.chart = null;
             this.data = [];
+            this.map = map;
+            this.crosshairMarker = null;
             this.initializeChart();
         }
 
         initializeChart() {
             const ctx = this.canvas.getContext('2d');
+            const self = this;
 
             this.chart = new Chart(ctx, {
                 type: 'scatter',
@@ -42,19 +45,18 @@
                             display: false
                         },
                         tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const point = context.raw;
-                                    const lines = [
-                                        `Gauge: ${point.x.toFixed(3)} in`,
-                                        `Radar: ${point.y.toFixed(3)} in`
-                                    ];
-                                    if (point.bias !== null && point.bias !== undefined) {
-                                        lines.push(`Bias: ${point.bias.toFixed(2)}`);
-                                    }
-                                    return lines;
-                                }
+                            enabled: false  // Disable tooltip popup
+                        }
+                    },
+                    onHover: function(event, activeElements) {
+                        if (activeElements.length > 0) {
+                            const dataIndex = activeElements[0].index;
+                            const gaugeData = self.fullGaugeData[dataIndex];
+                            if (gaugeData) {
+                                self.showCrosshair(gaugeData.lat, gaugeData.lon);
                             }
+                        } else {
+                            self.hideCrosshair();
                         }
                     },
                     scales: {
@@ -124,6 +126,7 @@
         updateData(gaugeData, biasMode = false) {
             if (!gaugeData || gaugeData.length === 0) {
                 this.data = [];
+                this.fullGaugeData = [];
                 this.chart.data.datasets[0].data = [];
                 this.chart.update();
                 this.updateStatistics([]);
@@ -140,6 +143,7 @@
                 }));
 
             this.data = scatterData;
+            this.fullGaugeData = gaugeData.filter(d => d.displayValue > 0);  // Store full gauge data for crosshair
             this.chart.data.datasets[0].data = scatterData;
 
             // Auto-adjust scales based on data
@@ -157,6 +161,40 @@
 
             // Update statistics display
             this.updateStatistics(scatterData);
+        }
+
+        showCrosshair(lat, lon) {
+            if (!this.map) return;
+
+            // Remove existing crosshair if any
+            if (this.crosshairMarker) {
+                this.map.removeLayer(this.crosshairMarker);
+            }
+
+            // Create crosshair icon
+            const crosshairIcon = L.divIcon({
+                className: 'crosshair-icon',
+                html: '<div style="position: relative; width: 40px; height: 40px;">' +
+                      '<div style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: red; transform: translateY(-50%);"></div>' +
+                      '<div style="position: absolute; left: 50%; top: 0; width: 2px; height: 100%; background: red; transform: translateX(-50%);"></div>' +
+                      '</div>',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+
+            // Add crosshair marker
+            this.crosshairMarker = L.marker([lat, lon], {
+                icon: crosshairIcon,
+                interactive: false,
+                zIndexOffset: 1000
+            }).addTo(this.map);
+        }
+
+        hideCrosshair() {
+            if (this.crosshairMarker && this.map) {
+                this.map.removeLayer(this.crosshairMarker);
+                this.crosshairMarker = null;
+            }
         }
 
         calculateStatistics(data) {

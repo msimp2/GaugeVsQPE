@@ -849,15 +849,15 @@
         };
         // Main initialization function that runs after Leaflet loads
         function initializeApp() {
-            // Initialize scatterplot
-            window.scatterplotManager = new ScatterplotManager('scatterplot-canvas');
-
-            // Initialize map
+            // Initialize map first
             const map = L.map('map', {
                 center: [39.8283, -98.5795],
                 zoom: 5,
                 zoomControl: true
             });
+
+            // Initialize scatterplot with map reference for crosshairs
+            window.scatterplotManager = new ScatterplotManager('scatterplot-canvas', map);
 
             // Define all available basemaps
             const basemaps = {
