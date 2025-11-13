@@ -27,7 +27,8 @@ const qpeColorMap = {
 
 // Get color for precipitation value using MRMS colormap
 function getPrecipColor(valueInInches) {
-    if (valueInInches < 0.01) return 'rgb(200, 200, 200)'; // Gray for trace/zero
+    // Only show gray for exactly 0 (not trace amounts)
+    if (valueInInches <= 0) return 'rgb(200, 200, 200)'; // Gray for zero
 
     for (let i = 0; i < qpeColorMap.thresholds.length; i++) {
         if (valueInInches >= qpeColorMap.thresholds[i]) {
@@ -43,7 +44,7 @@ function getBiasColor(biasRatio) {
     }
 
     // Positive bias (gauge > QPE) - light to dark red
-    if (biasRatio >= 10) return 'rgb(139, 0, 0)';
+    if (biasRatio >= 10) return 'rgb(139, 0, 0)';  // Super dark red for extreme overestimation
     if (biasRatio >= 5) return 'rgb(178, 34, 34)';
     if (biasRatio >= 2.5) return 'rgb(205, 92, 92)';
     if (biasRatio >= 2.0) return 'rgb(220, 120, 120)';
@@ -62,9 +63,9 @@ function getBiasColor(biasRatio) {
     if (biasRatio >= 0.4) return 'rgb(150, 150, 235)';
     if (biasRatio >= 0.2) return 'rgb(120, 120, 220)';
     if (biasRatio >= 0.1) return 'rgb(92, 92, 205)';
-    if (biasRatio > 0) return 'rgb(34, 34, 178)';
+    if (biasRatio > 0.01) return 'rgb(34, 34, 178)';
 
-    return 'rgb(0, 0, 139)'; // Very low bias
+    return 'rgb(0, 0, 139)'; // Very dark blue for extreme underestimation (bias <= 0.01)
 }
 
 // Build MADIS URL for precipitation (1-hour or 24-hour)
@@ -118,6 +119,22 @@ async function getMrmsValueAt(lat, lon) {
         console.error('Error fetching MRMS value:', error);
         return null;
     }
+}
+
+// Process array in batches to avoid overwhelming the browser/server
+async function processBatches(items, batchSize, processFn) {
+    const results = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(processFn));
+        results.push(...batchResults);
+
+        // Small delay between batches to prevent overwhelming the connection
+        if (i + batchSize < items.length) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    }
+    return results;
 }
 
 
@@ -175,34 +192,38 @@ async function plotMadisData(map) {
         totalLoadedEl.textContent = totalGaugesLoaded;
     }
 
-    // Fetch MRMS values for all gauges in parallel
-    const gaugePromises = window.madisData
+    // Filter gauges with value > 0
+    const filteredGauges = window.madisData
         .filter(item => {
             const { lat, lon, value } = item;
             return !isNaN(lat) && !isNaN(lon) &&
                    lat >= lowerLat && lat <= upperLat &&
                    lon >= lowerLon && lon <= upperLon &&
-                   value > 0;
-        })
-        .map(async (item) => {
-            const { stationId, obvTime, provider, value, lat, lon } = item;
-            const displayValue = convertFromMM(value, unit);
-
-            if (!isFinite(displayValue) || isNaN(displayValue)) return null;
-
-            // Fetch MRMS value at this location
-            const mrmsValue = await getMrmsValueAt(lat, lon);
-
-            // Calculate bias if MRMS value is available
-            let biasRatio = null;
-            if (mrmsValue !== null && mrmsValue !== undefined && mrmsValue > 0.001) {
-                biasRatio = displayValue / mrmsValue;
-            }
-
-            return { stationId, obvTime, provider, displayValue, mrmsValue, biasRatio, lat, lon };
+                   value > 0;  // Only process gauges with precipitation
         });
 
-    const gaugeData = await Promise.all(gaugePromises);
+    // Process gauges in batches to avoid overwhelming the server
+    const gaugeData = await processBatches(filteredGauges, 50, async (item) => {
+        const { stationId, obvTime, provider, value, lat, lon } = item;
+        const displayValue = convertFromMM(value, unit);
+
+        if (!isFinite(displayValue) || isNaN(displayValue)) return null;
+
+        // Fetch MRMS value at this location
+        const mrmsValue = await getMrmsValueAt(lat, lon);
+
+        // Calculate bias with special handling for edge cases
+        let biasRatio = null;
+        if (displayValue > 0 && (mrmsValue === null || mrmsValue === 0 || mrmsValue < 0.001)) {
+            // Gauge detected precip but MRMS didn't - set bias to 11 (extreme overestimation)
+            biasRatio = 11;
+        } else if (mrmsValue !== null && mrmsValue !== undefined && mrmsValue >= 0.001) {
+            // Normal case: both have values
+            biasRatio = displayValue / mrmsValue;
+        }
+
+        return { stationId, obvTime, provider, displayValue, mrmsValue, biasRatio, lat, lon };
+    });
 
     // Store full gauge data globally for filtering by map bounds
     window.fullGaugeData = gaugeData.filter(d => d !== null);

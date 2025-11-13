@@ -130,12 +130,12 @@
                 return;
             }
 
-            // Filter out data points where MRMS value is null/undefined
+            // Include all gauges with displayValue > 0, even if MRMS is 0 or null
             const scatterData = gaugeData
-                .filter(d => d.mrmsValue !== null && d.mrmsValue !== undefined && d.displayValue > 0)
+                .filter(d => d.displayValue > 0)
                 .map(d => ({
                     x: d.displayValue,  // Gauge value
-                    y: d.mrmsValue,      // Radar value
+                    y: d.mrmsValue !== null && d.mrmsValue !== undefined ? d.mrmsValue : 0,  // Use 0 if MRMS is null
                     bias: d.biasRatio
                 }));
 
