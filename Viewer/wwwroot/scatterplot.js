@@ -9,7 +9,9 @@
             this.data = [];
             this.map = map;
             this.crosshairMarker = null;
+            this.excludedIndices = new Set();  // Track excluded gauge indices
             this.initializeChart();
+            this.setupClickHandler();
         }
 
         initializeChart() {
@@ -19,15 +21,28 @@
             this.chart = new Chart(ctx, {
                 type: 'scatter',
                 data: {
-                    datasets: [{
-                        label: 'Gauge vs Radar QPE',
-                        data: [],
-                        backgroundColor: 'rgba(52, 152, 219, 0.6)',
-                        borderColor: 'rgba(52, 152, 219, 1)',
-                        borderWidth: 1,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }]
+                    datasets: [
+                        {
+                            label: 'Gauge vs Radar QPE',
+                            data: [],
+                            backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                            borderColor: 'rgba(52, 152, 219, 1)',
+                            borderWidth: 1,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Excluded Gauges',
+                            data: [],
+                            pointStyle: 'cross',
+                            backgroundColor: 'rgba(231, 76, 60, 0.8)',
+                            borderColor: 'rgba(231, 76, 60, 1)',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10,
+                            rotation: 45
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -50,10 +65,23 @@
                     },
                     onHover: function(event, activeElements) {
                         if (activeElements.length > 0) {
-                            const dataIndex = activeElements[0].index;
-                            const gaugeData = self.fullGaugeData[dataIndex];
-                            if (gaugeData) {
-                                self.showCrosshair(gaugeData.lat, gaugeData.lon);
+                            const element = activeElements[0];
+                            const datasetIndex = element.datasetIndex;
+
+                            // Only show crosshair for data points (dataset 0 or 1), not the reference line
+                            if (datasetIndex === 0 || datasetIndex === 1) {
+                                // Get the original index from the chart data point
+                                const chartPoint = self.chart.data.datasets[datasetIndex].data[element.index];
+
+                                // Find the matching gauge in fullGaugeData
+                                const gaugeData = self.fullGaugeData.find(g =>
+                                    g.displayValue === chartPoint.x &&
+                                    (g.mrmsValue === chartPoint.y || (g.mrmsValue === null && chartPoint.y === 0))
+                                );
+
+                                if (gaugeData) {
+                                    self.showCrosshair(gaugeData.lat, gaugeData.lon);
+                                }
                             }
                         } else {
                             self.hideCrosshair();
@@ -123,11 +151,76 @@
             this.chart.update('none');
         }
 
+        setupClickHandler() {
+            const self = this;
+            this.canvas.addEventListener('click', function(evt) {
+                const points = self.chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+
+                if (points.length > 0) {
+                    const firstPoint = points[0];
+                    const datasetIndex = firstPoint.datasetIndex;
+                    const pointIndex = firstPoint.index;
+
+                    // Only handle clicks on the main dataset (0) or excluded dataset (1)
+                    if (datasetIndex === 0 || datasetIndex === 1) {
+                        // Get the clicked point data
+                        const chartPoint = self.chart.data.datasets[datasetIndex].data[pointIndex];
+
+                        // Find the original index in self.data
+                        const originalIndex = self.data.findIndex(d =>
+                            d.x === chartPoint.x && d.y === chartPoint.y
+                        );
+
+                        if (originalIndex !== -1) {
+                            self.toggleExclude(originalIndex);
+                        }
+                    }
+                }
+            });
+        }
+
+        toggleExclude(index) {
+            if (this.excludedIndices.has(index)) {
+                // Re-include the gauge
+                this.excludedIndices.delete(index);
+            } else {
+                // Exclude the gauge
+                this.excludedIndices.add(index);
+            }
+
+            // Refresh the chart and statistics
+            this.refreshDisplay();
+        }
+
+        refreshDisplay() {
+            // Separate data into included and excluded
+            const includedData = [];
+            const excludedData = [];
+
+            this.data.forEach((point, index) => {
+                if (this.excludedIndices.has(index)) {
+                    excludedData.push(point);
+                } else {
+                    includedData.push(point);
+                }
+            });
+
+            // Update datasets
+            this.chart.data.datasets[0].data = includedData;
+            this.chart.data.datasets[1].data = excludedData;
+            this.chart.update();
+
+            // Update statistics with only included data
+            this.updateStatistics(includedData);
+        }
+
         updateData(gaugeData, biasMode = false) {
             if (!gaugeData || gaugeData.length === 0) {
                 this.data = [];
                 this.fullGaugeData = [];
+                this.excludedIndices.clear();
                 this.chart.data.datasets[0].data = [];
+                this.chart.data.datasets[1].data = [];
                 this.chart.update();
                 this.updateStatistics([]);
                 return;
@@ -144,7 +237,6 @@
 
             this.data = scatterData;
             this.fullGaugeData = gaugeData.filter(d => d.displayValue > 0);  // Store full gauge data for crosshair
-            this.chart.data.datasets[0].data = scatterData;
 
             // Auto-adjust scales based on data
             if (scatterData.length > 0) {
@@ -157,10 +249,8 @@
                 this.chart.options.scales.y.max = scaleMax;
             }
 
-            this.chart.update();
-
-            // Update statistics display
-            this.updateStatistics(scatterData);
+            // Use refreshDisplay to properly separate included/excluded data
+            this.refreshDisplay();
         }
 
         showCrosshair(lat, lon) {
